@@ -1,4 +1,5 @@
 import os
+import inspect
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query
@@ -71,6 +72,15 @@ def clean(value: Any):
     return str(value)
 
 
+async def resolve(value):
+    """
+    Resolve both normal and async client results.
+    """
+    if inspect.isawaitable(value):
+        return await value
+    return value
+
+
 def video_to_dict(video):
     """
     Normalize video object for MovieHub.
@@ -139,7 +149,7 @@ def health():
 # =========================
 
 @app.get("/api/search")
-def search(
+async def search(
     q: str = Query(..., min_length=1),
     quality: int | None = None,
     sort: str | None = None,
@@ -154,7 +164,7 @@ def search(
 ):
     try:
 
-        results = client.search_videos(
+        results = await resolve(client.search_videos(
             query=q,
             minimum_quality=quality,
             sort_by=sort,
@@ -166,7 +176,7 @@ def search(
             production=production,
             fps=fps,
             pages=pages,
-        )
+        ))
 
         items = []
 
@@ -193,12 +203,12 @@ def search(
 # =========================
 
 @app.get("/api/video")
-def video(
+async def video(
     id: str = Query(...)
 ):
     try:
 
-        result = client.get_video(id)
+        result = await resolve(client.get_video(id))
 
         return {
             "success": True,
@@ -218,12 +228,12 @@ def video(
 # =========================
 
 @app.get("/api/short")
-def short(
+async def short(
     id: str = Query(...)
 ):
     try:
 
-        result = client.get_short(id)
+        result = await resolve(client.get_short(id))
 
         return {
             "success": True,
@@ -243,12 +253,12 @@ def short(
 # =========================
 
 @app.get("/api/channel")
-def channel(
+async def channel(
     id: str = Query(...)
 ):
     try:
 
-        result = client.get_channel(id)
+        result = await resolve(client.get_channel(id))
 
         return {
             "success": True,
@@ -268,12 +278,12 @@ def channel(
 # =========================
 
 @app.get("/api/creator")
-def creator(
+async def creator(
     id: str = Query(...)
 ):
     try:
 
-        result = client.get_creator(id)
+        result = await resolve(client.get_creator(id))
 
         return {
             "success": True,
@@ -293,12 +303,12 @@ def creator(
 # =========================
 
 @app.get("/api/pornstar")
-def pornstar(
+async def pornstar(
     id: str = Query(...)
 ):
     try:
 
-        result = client.get_pornstar(id)
+        result = await resolve(client.get_pornstar(id))
 
         return {
             "success": True,
@@ -318,16 +328,16 @@ def pornstar(
 # =========================
 
 @app.get("/api/profile/videos")
-def profile_videos(
+async def profile_videos(
     profile: str = Query(...),
     pages: int = 1
 ):
     try:
 
-        results = client.search_videos(
+        results = await resolve(client.search_videos(
             query=profile,
             pages=pages
-        )
+        ))
 
         items = [
             video_to_dict(video)
