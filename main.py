@@ -40,13 +40,10 @@ client = Client()
 
 
 # =========================================================
-# HELPERS
+# HELPER: GET ATTRIBUTE
 # =========================================================
 
 def get_attr(obj: Any, *names):
-    """
-    Safely get an attribute from dict/object.
-    """
     if obj is None:
         return None
 
@@ -66,10 +63,11 @@ def get_attr(obj: Any, *names):
     return None
 
 
+# =========================================================
+# HELPER: CLEAN JSON
+# =========================================================
+
 def clean(value: Any):
-    """
-    Convert API/package objects into JSON-safe data.
-    """
 
     if value is None:
         return None
@@ -89,8 +87,6 @@ def clean(value: Any):
             for v in value
         ]
 
-    # Avoid serializing internal package objects
-    # such as BaseCore, Client, etc.
     try:
         if hasattr(value, "isoformat"):
             return value.isoformat()
@@ -100,34 +96,29 @@ def clean(value: Any):
     return str(value)
 
 
+# =========================================================
+# HELPER: RESOLVE COROUTINE
+# =========================================================
+
 async def resolve(value):
-    """
-    Resolve coroutine if necessary.
-    """
-    try:
-        if inspect.isawaitable(value):
-            return await value
-    except Exception:
-        pass
+
+    if inspect.isawaitable(value):
+        return await value
 
     return value
 
 
+# =========================================================
+# HELPER: COLLECT ASYNC RESULTS
+# =========================================================
+
 async def collect_results(value):
-    """
-    Supports:
-    - normal list
-    - tuple
-    - dict
-    - coroutine
-    - async generator
-    - normal iterable
-    """
 
     value = await resolve(value)
 
     # Async generator / async iterable
     if hasattr(value, "__aiter__"):
+
         items = []
 
         async for item in value:
@@ -135,28 +126,31 @@ async def collect_results(value):
 
         return items
 
-    if value is None:
-        return []
-
+    # List / tuple / set
     if isinstance(value, (list, tuple, set)):
         return list(value)
 
+    # Dictionary
     if isinstance(value, dict):
         return [value]
+
+    # Single object
+    if value is None:
+        return []
 
     return [value]
 
 
+# =========================================================
+# HELPER: EXTRACT ScrapeResult.item
+# =========================================================
+
 def extract_item(value):
-    """
-    xhamster_api search can return:
 
-        ScrapeResult(..., item=Video(...))
-
-    So extract the actual Video object.
-    """
-
-    item = get_attr(value, "item")
+    item = get_attr(
+        value,
+        "item"
+    )
 
     if item is not None:
         return item
@@ -164,16 +158,15 @@ def extract_item(value):
     return value
 
 
+# =========================================================
+# VIDEO CONVERTER
+# =========================================================
+
 def video_to_dict(video):
-    """
-    Convert xhamster Video / ScrapeResult
-    into a clean JSON object.
-    """
 
     # ScrapeResult -> Video
     video = extract_item(video)
 
-    # Basic information
     video_id = get_attr(
         video,
         "id",
@@ -236,8 +229,6 @@ def video_to_dict(video):
         "m3u8"
     )
 
-    # Some package versions may expose stream/video
-    # under different names.
     stream_url = get_attr(
         video,
         "video",
@@ -248,35 +239,41 @@ def video_to_dict(video):
         "download_url"
     )
 
-    # Prefer actual stream if available.
-    # Otherwise preview URL.
-    # Finally source URL.
+    # Priority:
+    # actual stream > m3u8 > preview > source URL
     final_video_url = (
-        m3u8
-        or stream_url
+        stream_url
+        or m3u8
         or preview_video
         or url
     )
 
     return {
         "id": clean(video_id),
+
         "title": clean(title),
+
         "description": clean(description),
 
         "poster": clean(thumbnail),
+
         "thumbnail": clean(thumbnail),
 
         "video_url": clean(final_video_url),
+
         "video": clean(final_video_url),
 
         "url": clean(url),
+
         "preview_video": clean(preview_video),
 
         "duration": clean(duration),
+
         "rating": clean(rating),
 
         "categories": clean(categories),
-        "tags": clean(tags),
+
+        "tags": clean(tags)
     }
 
 
@@ -309,6 +306,29 @@ async def health():
 
 
 # =========================================================
+# API INFO
+# =========================================================
+
+@app.get("/api")
+async def api_info():
+
+    return {
+        "name": "MovieHub API",
+        "version": "1.0.0",
+
+        "endpoints": {
+            "search": "/api/search?q=test",
+            "video": "/api/video?id=VIDEO_ID",
+            "short": "/api/short?id=SHORT_ID",
+            "channel": "/api/channel?id=CHANNEL_ID",
+            "creator": "/api/creator?id=CREATOR_ID",
+            "pornstar": "/api/pornstar?id=PROFILE_ID",
+            "profile_videos": "/api/profile/videos?query=test"
+        }
+    }
+
+
+# =========================================================
 # SEARCH
 # =========================================================
 
@@ -320,9 +340,11 @@ async def search(
 
     try:
 
+        # IMPORTANT:
+        # xhamster_api uses "pages", not "page"
         results = client.search_videos(
             query=q,
-            page=page
+            pages=page
         )
 
         videos = await collect_results(results)
@@ -332,9 +354,10 @@ async def search(
         for result in videos:
 
             try:
-                item = video_to_dict(result)
 
-                output.append(item)
+                output.append(
+                    video_to_dict(result)
+                )
 
             except Exception as e:
 
@@ -374,6 +397,7 @@ async def video(
         result = await resolve(result)
 
         if result is None:
+
             raise HTTPException(
                 status_code=404,
                 detail="Video not found"
@@ -398,7 +422,7 @@ async def video(
 
 
 # =========================================================
-# SHORT VIDEO
+# SHORT
 # =========================================================
 
 @app.get("/api/short")
@@ -413,6 +437,7 @@ async def short(
         result = await resolve(result)
 
         if result is None:
+
             raise HTTPException(
                 status_code=404,
                 detail="Short video not found"
@@ -452,6 +477,7 @@ async def channel(
         result = await resolve(result)
 
         if result is None:
+
             raise HTTPException(
                 status_code=404,
                 detail="Channel not found"
@@ -489,6 +515,7 @@ async def creator(
         result = await resolve(result)
 
         if result is None:
+
             raise HTTPException(
                 status_code=404,
                 detail="Creator not found"
@@ -496,147 +523,3 @@ async def creator(
 
         return {
             "success": True,
-            "result": clean(result)
-        }
-
-    except HTTPException:
-        raise
-
-    except Exception as e:
-
-        raise HTTPException(
-            status_code=500,
-            detail=str(e)
-        )
-
-
-# =========================================================
-# PORNSTAR
-# =========================================================
-
-@app.get("/api/pornstar")
-async def pornstar(
-    id: str = Query(...)
-):
-
-    try:
-
-        result = client.get_pornstar(id)
-
-        result = await resolve(result)
-
-        if result is None:
-            raise HTTPException(
-                status_code=404,
-                detail="Profile not found"
-            )
-
-        return {
-            "success": True,
-            "result": clean(result)
-        }
-
-    except HTTPException:
-        raise
-
-    except Exception as e:
-
-        raise HTTPException(
-            status_code=500,
-            detail=str(e)
-        )
-
-
-# =========================================================
-# PROFILE VIDEOS
-# =========================================================
-
-@app.get("/api/profile/videos")
-async def profile_videos(
-    query: str = Query(..., min_length=1),
-    page: int = Query(1, ge=1)
-):
-
-    try:
-
-        results = client.search_videos(
-            query=query,
-            page=page
-        )
-
-        videos = await collect_results(results)
-
-        output = []
-
-        for result in videos:
-
-            try:
-                output.append(
-                    video_to_dict(result)
-                )
-
-            except Exception as e:
-
-                output.append({
-                    "error": str(e)
-                })
-
-        return {
-            "success": True,
-            "query": query,
-            "page": page,
-            "count": len(output),
-            "results": output
-        }
-
-    except Exception as e:
-
-        raise HTTPException(
-            status_code=500,
-            detail=str(e)
-        )
-
-
-# =========================================================
-# API INFO
-# =========================================================
-
-@app.get("/api")
-async def api_info():
-
-    return {
-        "name": "MovieHub API",
-        "version": "1.0.0",
-
-        "endpoints": {
-            "search": "/api/search?q=test",
-            "video": "/api/video?id=VIDEO_ID",
-            "short": "/api/short?id=SHORT_ID",
-            "channel": "/api/channel?id=CHANNEL_ID",
-            "creator": "/api/creator?id=CREATOR_ID",
-            "pornstar": "/api/pornstar?id=PROFILE_ID",
-            "profile_videos": "/api/profile/videos?query=test"
-        }
-    }
-
-
-# =========================================================
-# RUN
-# =========================================================
-
-if __name__ == "__main__":
-
-    import uvicorn
-
-    port = int(
-        os.environ.get(
-            "PORT",
-            8000
-        )
-    )
-
-    uvicorn.run(
-        app,
-        host="0.0.0.0",
-        port=port
-    )
