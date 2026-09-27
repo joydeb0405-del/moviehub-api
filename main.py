@@ -44,11 +44,14 @@ client = Client()
 # =========================================================
 
 def get_attr(obj: Any, *names):
+
     if obj is None:
         return None
 
     for name in names:
+
         try:
+
             if isinstance(obj, dict):
                 value = obj.get(name)
             else:
@@ -88,8 +91,10 @@ def clean(value: Any):
         ]
 
     try:
+
         if hasattr(value, "isoformat"):
             return value.isoformat()
+
     except Exception:
         pass
 
@@ -109,7 +114,7 @@ async def resolve(value):
 
 
 # =========================================================
-# HELPER: COLLECT ASYNC RESULTS
+# HELPER: COLLECT RESULTS
 # =========================================================
 
 async def collect_results(value):
@@ -126,7 +131,7 @@ async def collect_results(value):
 
         return items
 
-    # List / tuple / set
+    # List / Tuple / Set
     if isinstance(value, (list, tuple, set)):
         return list(value)
 
@@ -134,10 +139,11 @@ async def collect_results(value):
     if isinstance(value, dict):
         return [value]
 
-    # Single object
+    # None
     if value is None:
         return []
 
+    # Single object
     return [value]
 
 
@@ -239,8 +245,10 @@ def video_to_dict(video):
         "download_url"
     )
 
-    # Priority:
-    # actual stream > m3u8 > preview > source URL
+    # Prefer actual video stream.
+    # Then m3u8.
+    # Then preview video.
+    # Finally source URL.
     final_video_url = (
         stream_url
         or m3u8
@@ -340,8 +348,6 @@ async def search(
 
     try:
 
-        # IMPORTANT:
-        # xhamster_api uses "pages", not "page"
         results = client.search_videos(
             query=q,
             pages=page
@@ -523,3 +529,126 @@ async def creator(
 
         return {
             "success": True,
+            "result": clean(result)
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
+
+
+# =========================================================
+# PORNSTAR
+# =========================================================
+
+@app.get("/api/pornstar")
+async def pornstar(
+    id: str = Query(...)
+):
+
+    try:
+
+        result = client.get_pornstar(id)
+
+        result = await resolve(result)
+
+        if result is None:
+
+            raise HTTPException(
+                status_code=404,
+                detail="Profile not found"
+            )
+
+        return {
+            "success": True,
+            "result": clean(result)
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
+
+
+# =========================================================
+# PROFILE VIDEOS
+# =========================================================
+
+@app.get("/api/profile/videos")
+async def profile_videos(
+    query: str = Query(..., min_length=1),
+    page: int = Query(1, ge=1)
+):
+
+    try:
+
+        results = client.search_videos(
+            query=query,
+            pages=page
+        )
+
+        videos = await collect_results(results)
+
+        output = []
+
+        for result in videos:
+
+            try:
+
+                output.append(
+                    video_to_dict(result)
+                )
+
+            except Exception as e:
+
+                output.append({
+                    "error": str(e)
+                })
+
+        return {
+            "success": True,
+            "query": query,
+            "page": page,
+            "count": len(output),
+            "results": output
+        }
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
+
+
+# =========================================================
+# RUN SERVER
+# =========================================================
+
+if __name__ == "__main__":
+
+    import uvicorn
+
+    port = int(
+        os.environ.get(
+            "PORT",
+            8000
+        )
+    )
+
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=port
+    )
