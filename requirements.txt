@@ -1,0 +1,3 @@
+fastapi
+uvicorn[standard]
+unofficial-api-for-xhamster==2.6.2
