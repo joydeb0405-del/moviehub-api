@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import os
 from typing import Any
 
@@ -9,17 +7,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from xhamster_api import Client
 
 
-APP_VERSION = "1.0.0"
-
 app = FastAPI(
-    title="MovieHub xHamster API",
-    description="FastAPI bridge for the xhamster_api package.",
-    version=APP_VERSION,
+    title="MovieHub API",
+    description="MovieHub API wrapper",
+    version="1.0.0"
 )
 
-# ---------------------------------------------------------
+# =========================
 # CORS
-# ---------------------------------------------------------
+# =========================
 
 app.add_middleware(
     CORSMiddleware,
@@ -29,41 +25,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# =========================
+# Client
+# =========================
 
-# ---------------------------------------------------------
-# Global Client
-# ---------------------------------------------------------
-
-client: Client | None = None
-
-
-@app.on_event("startup")
-async def startup() -> None:
-    global client
-    client = Client()
+client = Client()
 
 
-@app.on_event("shutdown")
-async def shutdown() -> None:
-    global client
-    client = None
+# =========================
+# Helpers
+# =========================
 
-
-def get_client() -> Client:
-    if client is None:
-        raise HTTPException(
-            status_code=503,
-            detail="API client is not initialized",
-        )
-
-    return client
-
-
-# ---------------------------------------------------------
-# Safe JSON conversion
-# ---------------------------------------------------------
-
-def clean(value: Any) -> Any:
+def clean(value: Any):
+    """
+    Convert package objects into JSON-safe data.
+    """
 
     if value is None:
         return None
@@ -72,360 +48,113 @@ def clean(value: Any) -> Any:
         return value
 
     if isinstance(value, list):
-        return [clean(item) for item in value]
+        return [clean(x) for x in value]
 
     if isinstance(value, tuple):
-        return [clean(item) for item in value]
+        return [clean(x) for x in value]
 
     if isinstance(value, dict):
         return {
-            str(key): clean(val)
-            for key, val in value.items()
+            str(k): clean(v)
+            for k, v in value.items()
         }
+
+    if hasattr(value, "__dict__"):
+        data = {}
+
+        for key, val in vars(value).items():
+            if not key.startswith("_"):
+                data[key] = clean(val)
+
+        return data
 
     return str(value)
 
 
-# ---------------------------------------------------------
-# Video serializer
-# ---------------------------------------------------------
+def video_to_dict(video):
+    """
+    Normalize video object for MovieHub.
+    """
 
-def video_to_dict(video: Any) -> dict[str, Any]:
+    data = clean(video)
+
+    if not isinstance(data, dict):
+        return {
+            "value": data
+        }
 
     return {
-        "id": clean(
-            getattr(video, "video_id", None)
+        "id": data.get("id"),
+        "title": data.get("title"),
+        "thumbnail": (
+            data.get("thumbnail")
+            or data.get("thumb")
+            or data.get("image")
         ),
-
-        "video_id": clean(
-            getattr(video, "video_id", None)
+        "video": (
+            data.get("m3u8")
+            or data.get("video")
+            or data.get("url")
         ),
-
-        "title": clean(
-            getattr(video, "title", None)
+        "description": data.get("description"),
+        "duration": data.get("duration"),
+        "rating": data.get("rating"),
+        "categories": (
+            data.get("categories")
+            or data.get("category")
         ),
-
-        "url": clean(
-            getattr(video, "url", None)
-        ),
-
-        "thumbnail": clean(
-            getattr(video, "thumbnail", None)
-        ),
-
-        "preview_thumbnail": clean(
-            getattr(video, "preview_thumbnail", None)
-        ),
-
-        "preview_video": clean(
-            getattr(video, "preview_video", None)
-        ),
-
-        "video": clean(
-            getattr(video, "m3u8_base_url", None)
-        ),
-
-        "m3u8": clean(
-            getattr(video, "m3u8_base_url", None)
-        ),
-
-        "description": clean(
-            getattr(video, "description", None)
-        ),
-
-        "duration": clean(
-            getattr(video, "duration", None)
-        ),
-
-        "views": clean(
-            getattr(video, "views", None)
-        ),
-
-        "comments": clean(
-            getattr(video, "comments_count", None)
-        ),
-
-        "rating": clean(
-            getattr(video, "rating_percentage", None)
-        ),
-
-        "likes": clean(
-            getattr(video, "likes", None)
-        ),
-
-        "dislikes": clean(
-            getattr(video, "dislikes", None)
-        ),
-
-        "uploader": clean(
-            getattr(video, "uploader_name", None)
-        ),
-
-        "tags": clean(
-            getattr(video, "tags", None)
-        ),
-
-        "genre": clean(
-            getattr(video, "tags", None)
-        ),
-
-        "categories": clean(
-            getattr(video, "categories", None)
-        ),
-
-        "pornstars": clean(
-            getattr(video, "pornstars", None)
-        ),
-
-        "created_at": clean(
-            getattr(video, "created_timestamp", None)
-        ),
-
-        "date_ago": clean(
-            getattr(video, "date_ago", None)
-        ),
-
-        "is_vr": clean(
-            getattr(video, "is_vr", None)
-        ),
-
-        "is_hd": clean(
-            getattr(video, "is_hd", None)
-        ),
-
-        "max_resolution": clean(
-            getattr(video, "max_resolution", None)
-        ),
-
-        "orientation": clean(
-            getattr(video, "orientation", None)
-        ),
+        "tags": data.get("tags"),
+        "raw": data
     }
 
 
-# ---------------------------------------------------------
-# Short serializer
-# ---------------------------------------------------------
-
-def short_to_dict(short: Any) -> dict[str, Any]:
-
-    return {
-        "id": clean(
-            getattr(short, "video_id", None)
-        ),
-
-        "video_id": clean(
-            getattr(short, "video_id", None)
-        ),
-
-        "title": clean(
-            getattr(short, "title", None)
-        ),
-
-        "url": clean(
-            getattr(short, "url", None)
-        ),
-
-        "thumbnail": clean(
-            getattr(short, "thumbnail", None)
-        ),
-
-        "preview_video": clean(
-            getattr(short, "preview_video", None)
-        ),
-
-        "video": clean(
-            getattr(short, "m3u8_base_url", None)
-        ),
-
-        "m3u8": clean(
-            getattr(short, "m3u8_base_url", None)
-        ),
-
-        "duration": clean(
-            getattr(short, "duration", None)
-        ),
-
-        "views": clean(
-            getattr(short, "views", None)
-        ),
-
-        "likes": clean(
-            getattr(short, "likes", None)
-        ),
-
-        "author": clean(
-            getattr(short, "author", None)
-        ),
-
-        "author_link": clean(
-            getattr(short, "author_link", None)
-        ),
-
-        "author_logo": clean(
-            getattr(short, "author_logo", None)
-        ),
-
-        "tags": clean(
-            getattr(short, "tags", None)
-        ),
-    }
-
-
-# ---------------------------------------------------------
-# Collect async results
-# ---------------------------------------------------------
-
-async def collect_stream(
-    stream: Any,
-    limit: int,
-) -> tuple[list[dict[str, Any]], list[str]]:
-
-    items: list[dict[str, Any]] = []
-    errors: list[str] = []
-
-    try:
-
-        async for result in stream:
-
-            if len(items) >= limit:
-                break
-
-            try:
-
-                item = result.unwrap()
-
-                if hasattr(item, "video_id"):
-
-                    items.append(
-                        video_to_dict(item)
-                    )
-
-                else:
-
-                    items.append(
-                        clean(item)
-                    )
-
-            except Exception as exc:
-
-                errors.append(str(exc))
-
-    finally:
-
-        close_method = getattr(
-            stream,
-            "aclose",
-            None,
-        )
-
-        if close_method:
-
-            try:
-                await close_method()
-            except Exception:
-                pass
-
-    return items, errors
-
-
-# ---------------------------------------------------------
-# Root
-# ---------------------------------------------------------
+# =========================
+# Home
+# =========================
 
 @app.get("/")
-async def root():
-
+def home():
     return {
-        "success": True,
-        "name": "MovieHub xHamster API",
-        "version": APP_VERSION,
+        "name": "MovieHub API",
         "status": "online",
-        "health": "/api/health",
-        "docs": "/docs",
+        "version": "1.0.0",
+        "docs": "/docs"
     }
 
 
-# ---------------------------------------------------------
+# =========================
 # Health
-# ---------------------------------------------------------
+# =========================
 
 @app.get("/api/health")
-async def health():
-
+def health():
     return {
-        "success": True,
         "status": "ok",
-        "client_initialized": client is not None,
+        "api": "MovieHub API"
     }
 
 
-# ---------------------------------------------------------
+# =========================
 # Search
-# ---------------------------------------------------------
+# =========================
 
 @app.get("/api/search")
-async def search(
-    q: str = Query(
-        ...,
-        min_length=1,
-        description="Search query",
-    ),
-
-    pages: int = Query(
-        1,
-        ge=1,
-        le=10,
-    ),
-
-    limit: int = Query(
-        20,
-        ge=1,
-        le=100,
-    ),
-
-    quality: str = Query(
-        "720p",
-    ),
-
-    sort: str | None = Query(
-        None,
-    ),
-
-    category: str | None = Query(
-        None,
-    ),
-
-    vr: bool = Query(
-        False,
-    ),
-
-    full_length: bool = Query(
-        False,
-    ),
-
-    min_duration: str | None = Query(
-        None,
-    ),
-
-    date: str | None = Query(
-        None,
-    ),
-
-    production: str | None = Query(
-        None,
-    ),
-
-    fps: str | None = Query(
-        None,
-    ),
+def search(
+    q: str = Query(..., min_length=1),
+    quality: int | None = None,
+    sort: str | None = None,
+    category: str | None = None,
+    vr: bool | None = None,
+    full_length: bool | None = None,
+    min_duration: int | None = None,
+    date: str | None = None,
+    production: str | None = None,
+    fps: int | None = None,
+    pages: int = 1,
 ):
-
-    api = get_client()
-
     try:
 
-        stream = api.search_videos(
+        results = client.search_videos(
             query=q,
             minimum_quality=quality,
             sort_by=sort,
@@ -439,274 +168,201 @@ async def search(
             pages=pages,
         )
 
-        results, errors = await collect_stream(
-            stream,
-            limit,
-        )
+        items = []
+
+        for video in results:
+            items.append(video_to_dict(video))
 
         return {
             "success": True,
             "query": q,
-            "count": len(results),
-            "results": results,
-            "errors": errors,
+            "count": len(items),
+            "results": items
         }
 
-    except Exception as exc:
+    except Exception as e:
 
         raise HTTPException(
-            status_code=502,
-            detail=str(exc),
-        ) from exc
+            status_code=500,
+            detail=str(e)
+        )
 
 
-# ---------------------------------------------------------
+# =========================
 # Video
-# ---------------------------------------------------------
+# =========================
 
 @app.get("/api/video")
-async def video(
-    url: str = Query(
-        ...,
-        description="Full video URL",
-    ),
+def video(
+    id: str = Query(...)
 ):
-
-    api = get_client()
-
     try:
 
-        item = await api.get_video(
-            url,
-            load_html=True,
-        )
+        result = client.get_video(id)
 
         return {
             "success": True,
-            "result": video_to_dict(item),
+            "result": video_to_dict(result)
         }
 
-    except Exception as exc:
+    except Exception as e:
 
         raise HTTPException(
-            status_code=502,
-            detail=str(exc),
-        ) from exc
+            status_code=500,
+            detail=str(e)
+        )
 
 
-# ---------------------------------------------------------
+# =========================
 # Short
-# ---------------------------------------------------------
+# =========================
 
 @app.get("/api/short")
-async def short(
-    url: str = Query(
-        ...,
-        description="Full short URL",
-    ),
+def short(
+    id: str = Query(...)
 ):
-
-    api = get_client()
-
     try:
 
-        item = await api.get_short(
-            url,
-            load_html=True,
-        )
+        result = client.get_short(id)
 
         return {
             "success": True,
-            "result": short_to_dict(item),
+            "result": clean(result)
         }
 
-    except Exception as exc:
+    except Exception as e:
 
         raise HTTPException(
-            status_code=502,
-            detail=str(exc),
-        ) from exc
+            status_code=500,
+            detail=str(e)
+        )
 
 
-# ---------------------------------------------------------
+# =========================
 # Channel
-# ---------------------------------------------------------
+# =========================
 
 @app.get("/api/channel")
-async def channel(
-    url: str = Query(...),
+def channel(
+    id: str = Query(...)
 ):
-
-    api = get_client()
-
     try:
 
-        item = await api.get_channel(
-            url,
-            load_html=True,
-        )
+        result = client.get_channel(id)
 
         return {
             "success": True,
-            "result": clean(item),
+            "result": clean(result)
         }
 
-    except Exception as exc:
+    except Exception as e:
 
         raise HTTPException(
-            status_code=502,
-            detail=str(exc),
-        ) from exc
+            status_code=500,
+            detail=str(e)
+        )
 
 
-# ---------------------------------------------------------
+# =========================
 # Creator
-# ---------------------------------------------------------
+# =========================
 
 @app.get("/api/creator")
-async def creator(
-    url: str = Query(...),
+def creator(
+    id: str = Query(...)
 ):
-
-    api = get_client()
-
     try:
 
-        item = await api.get_creator(
-            url,
-            load_html=True,
-        )
+        result = client.get_creator(id)
 
         return {
             "success": True,
-            "result": clean(item),
+            "result": clean(result)
         }
 
-    except Exception as exc:
+    except Exception as e:
 
         raise HTTPException(
-            status_code=502,
-            detail=str(exc),
-        ) from exc
+            status_code=500,
+            detail=str(e)
+        )
 
 
-# ---------------------------------------------------------
+# =========================
 # Pornstar
-# ---------------------------------------------------------
+# =========================
 
 @app.get("/api/pornstar")
-async def pornstar(
-    url: str = Query(...),
+def pornstar(
+    id: str = Query(...)
 ):
-
-    api = get_client()
-
     try:
 
-        item = await api.get_pornstar(
-            url,
-            load_html=True,
-        )
+        result = client.get_pornstar(id)
 
         return {
             "success": True,
-            "result": clean(item),
+            "result": clean(result)
         }
 
-    except Exception as exc:
+    except Exception as e:
 
         raise HTTPException(
-            status_code=502,
-            detail=str(exc),
-        ) from exc
+            status_code=500,
+            detail=str(e)
+        )
 
 
-# ---------------------------------------------------------
-# Profile videos
-# ---------------------------------------------------------
+# =========================
+# Profile Videos
+# =========================
 
 @app.get("/api/profile/videos")
-async def profile_videos(
-    url: str = Query(...),
-
-    pages: int = Query(
-        1,
-        ge=1,
-        le=10,
-    ),
-
-    limit: int = Query(
-        20,
-        ge=1,
-        le=100,
-    ),
+def profile_videos(
+    profile: str = Query(...),
+    pages: int = 1
 ):
-
-    api = get_client()
-
     try:
 
-        if "/channels/" in url:
-
-            profile = await api.get_channel(
-                url,
-                load_html=True,
-            )
-
-        elif "/pornstars/" in url:
-
-            profile = await api.get_pornstar(
-                url,
-                load_html=True,
-            )
-
-        else:
-
-            profile = await api.get_creator(
-                url,
-                load_html=True,
-            )
-
-        videos = profile.videos(
-            pages=pages,
+        results = client.search_videos(
+            query=profile,
+            pages=pages
         )
 
-        results, errors = await collect_stream(
-            videos,
-            limit,
-        )
+        items = [
+            video_to_dict(video)
+            for video in results
+        ]
 
         return {
             "success": True,
-            "count": len(results),
-            "results": results,
-            "errors": errors,
+            "profile": profile,
+            "count": len(items),
+            "results": items
         }
 
-    except Exception as exc:
+    except Exception as e:
 
         raise HTTPException(
-            status_code=502,
-            detail=str(exc),
-        ) from exc
+            status_code=500,
+            detail=str(e)
+        )
 
 
-# ---------------------------------------------------------
-# Run locally
-# ---------------------------------------------------------
+# =========================
+# Render Start
+# =========================
 
 if __name__ == "__main__":
 
     import uvicorn
 
+    port = int(
+        os.environ.get("PORT", 8000)
+    )
+
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=int(
-            os.getenv(
-                "PORT",
-                "8000",
-            )
-        ),
-        reload=False,
-)
+        port=port
+    )
