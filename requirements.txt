@@ -1,7 +1,3 @@
 fastapi
 uvicorn[standard]
-selectolax
-chompjs
-eaf-base-api>=4.2.0
-m3u8
-curl_cffi
+git+https://github.com/EchterAlsFake/unofficial-api-for-xhamster.git
