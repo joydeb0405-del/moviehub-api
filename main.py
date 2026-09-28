@@ -33,7 +33,7 @@ UPSTREAM_TIMEOUT = float(
 
 
 # =========================================================
-# APP
+# FASTAPI APP
 # =========================================================
 
 app = FastAPI(
@@ -52,12 +52,12 @@ app.add_middleware(
     allow_origins=["*"],
     allow_credentials=False,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["*"]
 )
 
 
 # =========================================================
-# CLIENT
+# API CLIENT
 # =========================================================
 
 client = Client()
@@ -79,7 +79,11 @@ def get_attr(obj: Any, *names):
             if isinstance(obj, dict):
                 value = obj.get(name)
             else:
-                value = getattr(obj, name, None)
+                value = getattr(
+                    obj,
+                    name,
+                    None
+                )
 
             if value is not None:
                 return value
@@ -91,7 +95,7 @@ def get_attr(obj: Any, *names):
 
 
 # =========================================================
-# HELPER: CLEAN JSON
+# HELPER: CLEAN VALUE FOR JSON
 # =========================================================
 
 def clean(value: Any):
@@ -134,7 +138,7 @@ def clean(value: Any):
 
 
 # =========================================================
-# HELPER: RESOLVE COROUTINE
+# HELPER: RESOLVE AWAITABLE
 # =========================================================
 
 async def resolve(value):
@@ -153,7 +157,7 @@ async def collect_results(value):
 
     value = await resolve(value)
 
-    # Async generator / async iterable
+    # Async generator
     if hasattr(value, "__aiter__"):
 
         items = []
@@ -163,7 +167,7 @@ async def collect_results(value):
 
         return items
 
-    # List / Tuple / Set
+    # List / tuple / set
     if isinstance(
         value,
         (list, tuple, set)
@@ -175,16 +179,16 @@ async def collect_results(value):
     if isinstance(value, dict):
         return [value]
 
-    # None
+    # Nothing
     if value is None:
         return []
 
-    # Single object
+    # Single result
     return [value]
 
 
 # =========================================================
-# HELPER: EXTRACT ScrapeResult.item
+# HELPER: EXTRACT .item
 # =========================================================
 
 def extract_item(value):
@@ -201,7 +205,7 @@ def extract_item(value):
 
 
 # =========================================================
-# VIDEO CONVERTER
+# VIDEO -> DICT
 # =========================================================
 
 def video_to_dict(video):
@@ -281,7 +285,9 @@ def video_to_dict(video):
         "download_url"
     )
 
-    # Keep existing behavior for normal API
+    # Keep existing behavior.
+    # Debug endpoint will show us exactly
+    # which field is actually available.
     final_video_url = (
         stream_url
         or m3u8
@@ -291,50 +297,49 @@ def video_to_dict(video):
 
     return {
 
-        "id": clean(video_id),
+        "id":
+            clean(video_id),
 
-        "title": clean(title),
+        "title":
+            clean(title),
 
-        "description": clean(description),
+        "description":
+            clean(description),
 
-        "poster": clean(thumbnail),
+        "poster":
+            clean(thumbnail),
 
-        "thumbnail": clean(thumbnail),
+        "thumbnail":
+            clean(thumbnail),
 
-        "video_url": clean(
-            final_video_url
-        ),
+        "video_url":
+            clean(final_video_url),
 
-        "video": clean(
-            final_video_url
-        ),
+        "video":
+            clean(final_video_url),
 
-        "url": clean(url),
+        "url":
+            clean(url),
 
-        "preview_video": clean(
-            preview_video
-        ),
+        "preview_video":
+            clean(preview_video),
 
-        "duration": clean(
-            duration
-        ),
+        "duration":
+            clean(duration),
 
-        "rating": clean(
-            rating
-        ),
+        "rating":
+            clean(rating),
 
-        "categories": clean(
-            categories
-        ),
+        "categories":
+            clean(categories),
 
-        "tags": clean(
-            tags
-        )
+        "tags":
+            clean(tags)
     }
 
 
 # =========================================================
-# HELPER: SAFE CLIENT CALL
+# SAFE CLIENT CALL
 # =========================================================
 
 async def safe_client_call(
@@ -344,11 +349,15 @@ async def safe_client_call(
 ):
 
     """
-    Supports both synchronous and
-    asynchronous client methods.
+    Supports both:
 
-    Both positional and keyword arguments
-    are supported.
+        method(value)
+
+    and:
+
+        method(query=value, pages=1)
+
+    Also supports sync and async methods.
     """
 
     method = getattr(
@@ -367,14 +376,14 @@ async def safe_client_call(
     try:
 
         # -----------------------------------------
-        # Native async method
+        # ASYNC METHOD
         # -----------------------------------------
 
         if inspect.iscoroutinefunction(
             method
         ):
 
-            return await asyncio.wait_for(
+            result = await asyncio.wait_for(
 
                 method(
                     *args,
@@ -385,23 +394,24 @@ async def safe_client_call(
             )
 
         # -----------------------------------------
-        # Sync method
-        # Run inside worker thread
+        # SYNC METHOD
         # -----------------------------------------
 
-        result = await asyncio.wait_for(
+        else:
 
-            asyncio.to_thread(
-                method,
-                *args,
-                **kwargs
-            ),
+            result = await asyncio.wait_for(
 
-            timeout=UPSTREAM_TIMEOUT
-        )
+                asyncio.to_thread(
+                    method,
+                    *args,
+                    **kwargs
+                ),
+
+                timeout=UPSTREAM_TIMEOUT
+            )
 
         # -----------------------------------------
-        # Some libraries return awaitable
+        # Returned awaitable
         # -----------------------------------------
 
         if inspect.isawaitable(
@@ -420,10 +430,8 @@ async def safe_client_call(
     except asyncio.TimeoutError:
 
         logger.warning(
-            "Upstream timeout: %s args=%s kwargs=%s",
-            method_name,
-            args,
-            kwargs
+            "Upstream timeout: %s",
+            method_name
         )
 
         raise
@@ -447,13 +455,17 @@ async def root():
 
     return {
 
-        "name": "MovieHub API",
+        "name":
+            "MovieHub API",
 
-        "status": "online",
+        "status":
+            "online",
 
-        "version": "1.2.0",
+        "version":
+            "1.2.0",
 
-        "docs": "/docs"
+        "docs":
+            "/docs"
     }
 
 
@@ -466,9 +478,11 @@ async def health():
 
     return {
 
-        "status": "ok",
+        "status":
+            "ok",
 
-        "api": "MovieHub API",
+        "api":
+            "MovieHub API",
 
         "upstream_timeout":
             UPSTREAM_TIMEOUT
@@ -581,7 +595,7 @@ async def search(
             except Exception as e:
 
                 logger.exception(
-                    "Failed to convert search result"
+                    "Search result conversion failed"
                 )
 
                 output.append({
@@ -614,7 +628,7 @@ async def search(
 
             status_code=504,
 
-            detail:
+            detail=
                 "Upstream search request timed out"
         )
 
@@ -628,8 +642,8 @@ async def search(
 
             status_code=502,
 
-            detail:
-                f"Upstream search request failed: {str(e)}"
+            detail=
+                f"Upstream search request failed: {e}"
         )
 
 
@@ -649,7 +663,7 @@ async def video(
     try:
 
         logger.info(
-            "VIDEO REQUEST id=%s",
+            "VIDEO id=%s",
             id
         )
 
@@ -675,7 +689,7 @@ async def video(
 
                 status_code=404,
 
-                detail:
+                detail=
                     "Video not found"
             )
 
@@ -698,7 +712,7 @@ async def video(
 
             status_code=504,
 
-            detail:
+            detail=
                 "Upstream video source timed out"
         )
 
@@ -712,8 +726,8 @@ async def video(
 
             status_code=502,
 
-            detail:
-                f"Upstream video request failed: {str(e)}"
+            detail=
+                f"Upstream video request failed: {e}"
         )
 
 
@@ -731,26 +745,30 @@ async def video_debug(
 ):
 
     """
-    Diagnostic endpoint.
+    Debug endpoint.
 
-    This does NOT use video_to_dict()
-    for the main inspection.
+    This endpoint is specifically for checking
+    what get_video() actually returns.
 
-    It shows what get_video() actually
-    returns and which fields are available.
+    It exposes:
+      - result type
+      - available fields
+      - possible stream fields
+      - raw converted object
+      - execution time
     """
 
     started = time.monotonic()
 
-    logger.info(
-        "DEBUG VIDEO START id=%s",
-        id
-    )
-
     try:
 
+        logger.info(
+            "DEBUG VIDEO START id=%s",
+            id
+        )
+
         # -----------------------------------------
-        # Check client method
+        # Check get_video()
         # -----------------------------------------
 
         method = getattr(
@@ -775,10 +793,6 @@ async def video_debug(
                 "error":
                     "Client method get_video() not found"
             }
-
-        logger.info(
-            "DEBUG get_video method found"
-        )
 
         # -----------------------------------------
         # Call get_video()
@@ -831,7 +845,7 @@ async def video_debug(
         )
 
         # -----------------------------------------
-        # Nothing returned
+        # Empty result
         # -----------------------------------------
 
         if result is None:
@@ -855,23 +869,19 @@ async def video_debug(
             }
 
         # -----------------------------------------
-        # Extract actual item
+        # Extract item
         # -----------------------------------------
 
         inspected = extract_item(
             result
         )
 
-        # -----------------------------------------
-        # Result type
-        # -----------------------------------------
-
         result_type = type(
             inspected
         ).__name__
 
         # -----------------------------------------
-        # Get all public attributes
+        # Inspect available fields
         # -----------------------------------------
 
         attributes = {}
@@ -927,7 +937,7 @@ async def video_debug(
             }
 
         # -----------------------------------------
-        # Read important fields
+        # Field reader
         # -----------------------------------------
 
         def read_field(name):
@@ -952,6 +962,10 @@ async def video_debug(
             except Exception:
 
                 return None
+
+        # -----------------------------------------
+        # Important fields
+        # -----------------------------------------
 
         field_names = [
 
@@ -1000,10 +1014,12 @@ async def video_debug(
 
                 stream_fields[
                     name
-                ] = clean(value)
+                ] = clean(
+                    value
+                )
 
         # -----------------------------------------
-        # Determine likely stream fields
+        # Possible stream fields
         # -----------------------------------------
 
         possible_streams = {}
@@ -1029,7 +1045,6 @@ async def video_debug(
             "url",
 
             "preview_video"
-
         ]:
 
             value = read_field(
@@ -1040,10 +1055,12 @@ async def video_debug(
 
                 possible_streams[
                     name
-                ] = clean(value)
+                ] = clean(
+                    value
+                )
 
         # -----------------------------------------
-        # Final debug response
+        # Final response
         # -----------------------------------------
 
         return {
@@ -1090,8 +1107,7 @@ async def video_debug(
 
         logger.warning(
 
-            "DEBUG VIDEO TIMEOUT "
-            "id=%s after=%s",
+            "DEBUG VIDEO TIMEOUT id=%s after=%s",
 
             id,
 
@@ -1195,13 +1211,9 @@ async def short(
 
                 status_code=404,
 
-                detail:
+                detail=
                     "Short video not found"
             )
-
-        data = video_to_dict(
-            result
-        )
 
         return {
 
@@ -1209,7 +1221,9 @@ async def short(
                 True,
 
             "result":
-                data
+                video_to_dict(
+                    result
+                )
         }
 
     except asyncio.TimeoutError:
@@ -1218,7 +1232,7 @@ async def short(
 
             status_code=504,
 
-            detail:
+            detail=
                 "Upstream short-video request timed out"
         )
 
@@ -1232,8 +1246,8 @@ async def short(
 
             status_code=502,
 
-            detail:
-                f"Upstream short-video request failed: {str(e)}"
+            detail=
+                f"Upstream short-video request failed: {e}"
         )
 
 
@@ -1274,7 +1288,7 @@ async def channel(
 
                 status_code=404,
 
-                detail:
+                detail=
                     "Channel not found"
             )
 
@@ -1293,7 +1307,7 @@ async def channel(
 
             status_code=504,
 
-            detail:
+            detail=
                 "Upstream channel request timed out"
         )
 
@@ -1307,8 +1321,8 @@ async def channel(
 
             status_code=502,
 
-            detail:
-                f"Upstream channel request failed: {str(e)}"
+            detail=
+                f"Upstream channel request failed: {e}"
         )
 
 
@@ -1349,7 +1363,7 @@ async def creator(
 
                 status_code=404,
 
-                detail:
+                detail=
                     "Creator not found"
             )
 
@@ -1368,7 +1382,7 @@ async def creator(
 
             status_code=504,
 
-            detail:
+            detail=
                 "Upstream creator request timed out"
         )
 
@@ -1382,8 +1396,8 @@ async def creator(
 
             status_code=502,
 
-            detail:
-                f"Upstream creator request failed: {str(e)}"
+            detail=
+                f"Upstream creator request failed: {e}"
         )
 
 
@@ -1424,7 +1438,7 @@ async def pornstar(
 
                 status_code=404,
 
-                detail:
+                detail=
                     "Profile not found"
             )
 
@@ -1443,7 +1457,7 @@ async def pornstar(
 
             status_code=504,
 
-            detail:
+            detail=
                 "Upstream profile request timed out"
         )
 
@@ -1457,8 +1471,8 @@ async def pornstar(
 
             status_code=502,
 
-            detail:
-                f"Upstream profile request failed: {str(e)}"
+            detail=
+                f"Upstream profile request failed: {e}"
         )
 
 
@@ -1515,7 +1529,7 @@ async def profile_videos(
             except Exception as e:
 
                 logger.exception(
-                    "Failed to convert profile video"
+                    "Profile video conversion failed"
                 )
 
                 output.append({
@@ -1548,7 +1562,7 @@ async def profile_videos(
 
             status_code=504,
 
-            detail:
+            detail=
                 "Upstream profile-video request timed out"
         )
 
@@ -1562,13 +1576,13 @@ async def profile_videos(
 
             status_code=502,
 
-            detail:
-                f"Upstream profile-video request failed: {str(e)}"
+            detail=
+                f"Upstream profile-video request failed: {e}"
         )
 
 
 # =========================================================
-# RUN SERVER
+# START SERVER
 # =========================================================
 
 if __name__ == "__main__":
@@ -1578,7 +1592,7 @@ if __name__ == "__main__":
     port = int(
         os.environ.get(
             "PORT",
-            8000
+            "8000"
         )
     )
 
